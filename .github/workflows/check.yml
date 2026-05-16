@@ -1,0 +1,46 @@
+name: Check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Test Python implementation
+        run: python -m unittest discover -s python
+
+      - name: Test Go implementation
+        run: go test ./go
+
+      - name: Build C# implementation
+        run: dotnet build ./csharp/HashChecker
+
+      - name: Test Rust implementation
+        run: cargo test --manifest-path ./rust/Cargo.toml
+
+      - name: Run cross-language checks
+        run: python ./scripts/run_cross_checks.py
