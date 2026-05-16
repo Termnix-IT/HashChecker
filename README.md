@@ -14,6 +14,11 @@ HashChecker/
 ├─ docs/
 │  ├─ HashChecker手順書.md
 │  └─ 比較メモ.md
+├─ csharp/
+│  ├─ README.md
+│  └─ HashChecker/
+│     ├─ HashChecker.csproj
+│     └─ Program.cs
 ├─ powershell/
 │  ├─ Run-MD5Check.bat
 │  ├─ Run-SHA256Check.bat
@@ -120,6 +125,28 @@ go run .\go --algorithm md5 --workspace .\testdata\ok-md5
 go build -o .\bin\hash-checker.exe .\go
 ```
 
+## C#/.NET 版
+
+.NET 標準ライブラリだけで実装した CLI 版です。Windows 業務ツール寄りの配布や将来的な GUI 化を比較するための実装です。
+
+SHA256 の正常系サンプル:
+
+```powershell
+dotnet run --project .\csharp\HashChecker -- --algorithm sha256 --workspace .\testdata\ok-sha256
+```
+
+MD5 の正常系サンプル:
+
+```powershell
+dotnet run --project .\csharp\HashChecker -- --algorithm md5 --workspace .\testdata\ok-md5
+```
+
+ビルド例:
+
+```powershell
+dotnet build .\csharp\HashChecker
+```
+
 ## テスト
 
 Python 版のテスト:
@@ -132,6 +159,13 @@ Go 版のテスト:
 
 ```powershell
 go test .\go
+```
+
+C#/.NET 版の確認:
+
+```powershell
+dotnet build .\csharp\HashChecker
+dotnet run --project .\csharp\HashChecker -- --algorithm sha256 --workspace .\testdata\ok-sha256
 ```
 
 ## ドキュメント
