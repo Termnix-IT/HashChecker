@@ -9,6 +9,7 @@
 ```text
 HashChecker/
 ├─ README.md
+├─ go.mod
 ├─ 共通仕様.md
 ├─ docs/
 │  ├─ HashChecker手順書.md
@@ -18,6 +19,10 @@ HashChecker/
 │  ├─ Run-SHA256Check.bat
 │  ├─ Verify-MD5Hash.ps1
 │  └─ Verify-SHA256Hash.ps1
+├─ go/
+│  ├─ README.md
+│  ├─ hash_checker.go
+│  └─ hash_checker_test.go
 ├─ python/
 │  ├─ README.md
 │  ├─ hash_checker.py
@@ -93,6 +98,28 @@ python .\python\hash_checker.py --algorithm md5 --workspace .\testdata\ok-md5
 python .\python\hash_checker.py --algorithm md5 --hash-file .\testdata\ok-md5\vendor_hash.txt --target-file .\testdata\ok-md5\firmware.bin
 ```
 
+## Go 版
+
+Go 標準ライブラリだけで実装した CLI 版です。単一バイナリ配布を想定した比較対象です。
+
+SHA256 の正常系サンプル:
+
+```powershell
+go run .\go --algorithm sha256 --workspace .\testdata\ok-sha256
+```
+
+MD5 の正常系サンプル:
+
+```powershell
+go run .\go --algorithm md5 --workspace .\testdata\ok-md5
+```
+
+ビルド例:
+
+```powershell
+go build -o .\bin\hash-checker.exe .\go
+```
+
 ## テスト
 
 Python 版のテスト:
@@ -101,9 +128,14 @@ Python 版のテスト:
 python -m unittest discover -s python
 ```
 
+Go 版のテスト:
+
+```powershell
+go test .\go
+```
+
 ## ドキュメント
 
 - [共通仕様](./共通仕様.md)
 - [操作手順書](./docs/HashChecker手順書.md)
 - [多言語版 比較メモ](./docs/比較メモ.md)
-
