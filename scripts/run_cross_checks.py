@@ -7,6 +7,7 @@ import argparse
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -116,6 +117,8 @@ def run_check(language: LanguageCommand, check_case: CheckCase) -> bool:
         command,
         cwd=REPO_ROOT,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         capture_output=True,
         check=False,
     )
@@ -137,6 +140,36 @@ def runtime_available(language: LanguageCommand) -> bool:
     return language.required_tool is None or shutil.which(language.required_tool) is not None
 
 
+def prepare_language(language: LanguageCommand, build_dir: Path) -> LanguageCommand | None:
+    if language.name != "go":
+        return language
+
+    binary_name = "hash_checker_go.exe" if sys.platform == "win32" else "hash_checker_go"
+    binary_path = build_dir / binary_name
+    command = ["go", "build", "-o", str(binary_path), "./go"]
+    result = subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        print(f"SETUP FAIL {language.name:<7} go build failed")
+        print(f"command: {print_command(command)}")
+        print_process_output(result)
+        return None
+
+    return LanguageCommand(
+        name=language.name,
+        command_prefix=(str(binary_path),),
+        required_tool=language.required_tool,
+    )
+
+
 def main() -> int:
     args = parse_args()
     languages = selected_languages(args.language)
@@ -145,15 +178,23 @@ def main() -> int:
     print(f"Repository: {REPO_ROOT}")
     print()
 
-    for language in languages:
-        if not runtime_available(language):
-            print(f"MISSING {language.name:<7} required tool: {language.required_tool}")
-            failed = failed or not args.allow_missing
-            continue
+    with tempfile.TemporaryDirectory(prefix="hash_checker_cross_") as temp_dir:
+        build_dir = Path(temp_dir)
 
-        for check_case in CHECK_CASES:
-            if not run_check(language, check_case):
+        for language in languages:
+            if not runtime_available(language):
+                print(f"MISSING {language.name:<7} required tool: {language.required_tool}")
+                failed = failed or not args.allow_missing
+                continue
+
+            prepared_language = prepare_language(language, build_dir)
+            if prepared_language is None:
                 failed = True
+                continue
+
+            for check_case in CHECK_CASES:
+                if not run_check(prepared_language, check_case):
+                    failed = True
 
     print()
     if failed:
