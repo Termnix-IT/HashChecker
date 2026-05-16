@@ -14,6 +14,8 @@ HashChecker/
 ├─ docs/
 │  ├─ HashChecker手順書.md
 │  └─ 比較メモ.md
+├─ scripts/
+│  └─ run_cross_checks.py
 ├─ csharp/
 │  ├─ README.md
 │  └─ HashChecker/
@@ -202,6 +204,20 @@ Rust 版の確認:
 cargo test --manifest-path .\rust\Cargo.toml
 cargo run --manifest-path .\rust\Cargo.toml -- --algorithm sha256 --workspace .\testdata\ok-sha256
 ```
+
+言語横断の確認:
+
+```powershell
+python .\scripts\run_cross_checks.py
+```
+
+特定の言語だけ確認する場合:
+
+```powershell
+python .\scripts\run_cross_checks.py --language rust
+```
+
+この横断確認では、Python / Go / C#/.NET / Rust 版が同じ `testdata` に対して共通仕様どおりの終了コードを返すかを確認します。
 
 ## ドキュメント
 
