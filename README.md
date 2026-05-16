@@ -19,6 +19,12 @@ HashChecker/
 │  └─ HashChecker/
 │     ├─ HashChecker.csproj
 │     └─ Program.cs
+├─ rust/
+│  ├─ Cargo.lock
+│  ├─ Cargo.toml
+│  ├─ README.md
+│  └─ src/
+│     └─ main.rs
 ├─ powershell/
 │  ├─ Run-MD5Check.bat
 │  ├─ Run-SHA256Check.bat
@@ -147,6 +153,28 @@ dotnet run --project .\csharp\HashChecker -- --algorithm md5 --workspace .\testd
 dotnet build .\csharp\HashChecker
 ```
 
+## Rust 版
+
+Rust で実装した CLI 版です。単一バイナリ配布、型安全性、依存関係の選定を比較するための実装です。
+
+SHA256 の正常系サンプル:
+
+```powershell
+cargo run --manifest-path .\rust\Cargo.toml -- --algorithm sha256 --workspace .\testdata\ok-sha256
+```
+
+MD5 の正常系サンプル:
+
+```powershell
+cargo run --manifest-path .\rust\Cargo.toml -- --algorithm md5 --workspace .\testdata\ok-md5
+```
+
+ビルド例:
+
+```powershell
+cargo build --manifest-path .\rust\Cargo.toml --release
+```
+
 ## テスト
 
 Python 版のテスト:
@@ -166,6 +194,13 @@ C#/.NET 版の確認:
 ```powershell
 dotnet build .\csharp\HashChecker
 dotnet run --project .\csharp\HashChecker -- --algorithm sha256 --workspace .\testdata\ok-sha256
+```
+
+Rust 版の確認:
+
+```powershell
+cargo test --manifest-path .\rust\Cargo.toml
+cargo run --manifest-path .\rust\Cargo.toml -- --algorithm sha256 --workspace .\testdata\ok-sha256
 ```
 
 ## ドキュメント
