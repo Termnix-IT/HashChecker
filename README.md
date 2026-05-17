@@ -1,8 +1,27 @@
 # ハッシュ値確認ツール
 
+[![Check](https://github.com/Termnix-IT/HashChecker/actions/workflows/check.yml/badge.svg)](https://github.com/Termnix-IT/HashChecker/actions/workflows/check.yml)
+
 ベンダーから提供されたハッシュ値と、確認対象ファイルから算出したハッシュ値を比較するためのツールです。
 
 このリポジトリでは、業務制約版の PowerShell 実装を残しながら、学習・ポートフォリオ目的で複数言語版を作成します。
+
+## このリポジトリで示すこと
+
+- 実務制約に合わせた PowerShell 版と、共通仕様に沿った CLI 版の設計差
+- Python / Go / C#/.NET / Rust で同じ仕様を実装したときの言語ごとの特徴
+- 入力検出、ハッシュ値検証、終了コード、エラー表示を言語間で揃える設計
+- GitHub Actions と横断確認スクリプトによる仕様差の検出
+
+## 実装比較
+
+| 実装 | 位置づけ | 主な確認ポイント |
+|---|---|---|
+| PowerShell | 業務制約版 | Windows 標準機能、`.bat` 起動、手順化 |
+| Python | 基準実装 | 仕様整理、入力検証、テスト容易性 |
+| Go | 単一バイナリ配布の比較 | 標準ライブラリ、明示的なエラー処理、配布性 |
+| C#/.NET | Windows 業務ツール寄りの比較 | .NET 標準 API、Windows 配布、将来的な GUI 化 |
+| Rust | 型安全性と配布性の比較 | `Result` ベースのエラー処理、依存関係選定、単一バイナリ |
 
 ## フォルダ構成
 
@@ -198,6 +217,8 @@ dotnet build .\csharp\HashChecker
 dotnet run --project .\csharp\HashChecker -- --algorithm sha256 --workspace .\testdata\ok-sha256
 ```
 
+ローカル確認では .NET 8 Runtime を入れた環境で、C#/.NET 版の build と横断確認が通ることを確認しています。
+
 Rust 版の確認:
 
 ```powershell
@@ -218,6 +239,10 @@ python .\scripts\run_cross_checks.py --language rust
 ```
 
 この横断確認では、Python / Go / C#/.NET / Rust 版が同じ `testdata` に対して共通仕様どおりの終了コードを返すかを確認します。
+
+ローカル環境と GitHub Actions の両方で、Python / Go / C#/.NET / Rust 版の横断確認が通ることを確認しています。
+
+GitHub Actions では `push` と `pull_request` のたびに、各言語版の個別テスト・ビルドと横断確認を実行します。
 
 ## ドキュメント
 
