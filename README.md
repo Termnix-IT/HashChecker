@@ -32,6 +32,8 @@ HashChecker/
 ├─ 共通仕様.md
 ├─ docs/
 │  ├─ HashChecker手順書.md
+│  ├─ PowerShell版手順書.md
+│  ├─ 多言語CLI版手順書.md
 │  └─ 比較メモ.md
 ├─ scripts/
 │  └─ run_cross_checks.py
@@ -248,4 +250,6 @@ GitHub Actions では `push` と `pull_request` のたびに、各言語版の�
 
 - [共通仕様](./共通仕様.md)
 - [操作手順書](./docs/HashChecker手順書.md)
+- [PowerShell 版 手順書](./docs/PowerShell版手順書.md)
+- [多言語 CLI 版 手順書](./docs/多言語CLI版手順書.md)
 - [多言語版 比較メモ](./docs/比較メモ.md)
