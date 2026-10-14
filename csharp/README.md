@@ -1,6 +1,8 @@
 # C#/.NET 版 HashChecker
 
-.NET 標準ライブラリだけで実装したハッシュ値確認ツールです。
+.NET 10 のCLIとWindows向けWPF GUIです。`HashChecker.Core` の検証処理を両方で共有し、追加の外部ライブラリは使用しません。
+
+GUIは `dotnet run --project .\csharp\HashChecker.Gui` で起動します。画面操作と共通CLIの利用方法は [多言語CLI版手順書](../docs/多言語CLI版手順書.md) を参照してください。共有処理のテストは `dotnet run --project .\csharp\HashChecker.Tests` で実行できます。
 
 ## 実行例
 

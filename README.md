@@ -4,7 +4,7 @@
 
 ベンダーから提供されたハッシュ値と、確認対象ファイルから算出したハッシュ値を比較するためのツールです。
 
-このリポジトリでは、業務制約版の PowerShell 実装を残しながら、学習・ポートフォリオ目的で複数言語版を作成します。
+このリポジトリでは、共通の検証仕様を複数言語で実装し、それぞれを用途別のツールとして発展させています。
 
 ## このリポジトリで示すこと
 
@@ -12,16 +12,17 @@
 - Python / Go / C#/.NET / Rust で同じ仕様を実装したときの言語ごとの特徴
 - 入力検出、ハッシュ値検証、終了コード、エラー表示を言語間で揃える設計
 - GitHub Actions と横断確認スクリプトによる仕様差の検出
+- Rustで作成した一覧をGoで検証し、Pythonで結果を集計する言語間の受け渡し
 
 ## 実装比較
 
 | 実装 | 位置づけ | 主な確認ポイント |
 |---|---|---|
-| PowerShell | 業務制約版 | Windows 標準機能、`.bat` 起動、手順化 |
-| Python | 基準実装 | 仕様整理、入力検証、テスト容易性 |
-| Go | 単一バイナリ配布の比較 | 標準ライブラリ、明示的なエラー処理、配布性 |
-| C#/.NET | Windows 業務ツール寄りの比較 | .NET 標準 API、Windows 配布、将来的な GUI 化 |
-| Rust | 型安全性と配布性の比較 | `Result` ベースのエラー処理、依存関係選定、単一バイナリ |
+| PowerShell | 業務制約版 | Windows 標準機能、`.bat` 起動、結果オブジェクト・CSV保存 |
+| Python | 基準実装・結果集計 | 共通JSONの検証、複数結果をCSVへ集計 |
+| Go | 配布用CLI・CI検証 | SHA256一覧の一括検証、成功時の出力抑制 |
+| C#/.NET | Windows向けGUI | ファイル選択・ドラッグ、貼り付け、進捗・キャンセル |
+| Rust | フォルダ状態の記録 | SHA256一覧作成、追加・削除・変更検出 |
 
 ## フォルダ構成
 
@@ -36,9 +37,13 @@ HashChecker/
 │  ├─ 多言語CLI版手順書.md
 │  └─ 比較メモ.md
 ├─ scripts/
-│  └─ run_cross_checks.py
+│  ├─ run_cross_checks.py
+│  └─ test_powershell.ps1
 ├─ csharp/
 │  ├─ README.md
+│  ├─ HashChecker.Core/
+│  ├─ HashChecker.Gui/
+│  ├─ HashChecker.Tests/
 │  └─ HashChecker/
 │     ├─ HashChecker.csproj
 │     └─ Program.cs
@@ -46,21 +51,28 @@ HashChecker/
 │  ├─ Cargo.lock
 │  ├─ Cargo.toml
 │  ├─ README.md
-│  └─ src/
-│     └─ main.rs
+│  ├─ src/
+│  │  ├─ main.rs
+│  │  └─ manifest.rs
+│  └─ tests/
+│     └─ cli.rs
 ├─ powershell/
 │  ├─ Run-MD5Check.bat
 │  ├─ Run-SHA256Check.bat
+│  ├─ HashChecker.Common.ps1
 │  ├─ Verify-MD5Hash.ps1
 │  └─ Verify-SHA256Hash.ps1
 ├─ go/
 │  ├─ README.md
 │  ├─ hash_checker.go
-│  └─ hash_checker_test.go
+│  ├─ hash_checker_test.go
+│  └─ manifest_test.go
 ├─ python/
 │  ├─ README.md
 │  ├─ hash_checker.py
-│  └─ test_hash_checker.py
+│  ├─ summarize_results.py
+│  ├─ test_hash_checker.py
+│  └─ test_reports.py
 └─ testdata/
    ├─ ok-md5/
    ├─ ok-sha256/
@@ -82,6 +94,9 @@ HashChecker/
 - 大文字・小文字は区別しない
 - ハッシュ値の文字数と16進数形式を検証する
 - 終了コードを言語間で揃える
+- CLIの直接入力、JSON結果、バージョン・対応機能表示
+
+独自機能は全言語へ追加せず、対応する実装同士で入出力形式を揃えます。共通機能と受け渡し形式の境界は [共通仕様](./共通仕様.md)、用途別の実行方法は [多言語CLI版手順書](./docs/多言語CLI版手順書.md) を参照してください。
 
 ## 実装順
 
@@ -90,7 +105,7 @@ HashChecker/
 3. C#/.NET
 4. Rust
 
-最初に Python 版を基準実装として作成し、その後に Go、C#/.NET、Rust で同じ仕様を実装します。
+共通CLIはPython版を基準に揃え、用途別機能は上の担当に沿って実装します。
 
 ## PowerShell 版
 
@@ -156,7 +171,11 @@ go build -o .\bin\hash-checker.exe .\go
 
 ## C#/.NET 版
 
-.NET 標準ライブラリだけで実装した CLI 版です。Windows 業務ツール寄りの配布や将来的な GUI 化を比較するための実装です。
+.NET 10 の共通処理をCLIとWindows向けWPF GUIで共有します。GUIは以下で起動できます。
+
+```powershell
+dotnet run --project .\csharp\HashChecker.Gui
+```
 
 SHA256 の正常系サンプル:
 
@@ -219,7 +238,13 @@ dotnet build .\csharp\HashChecker
 dotnet run --project .\csharp\HashChecker -- --algorithm sha256 --workspace .\testdata\ok-sha256
 ```
 
-ローカル確認では .NET 8 Runtime を入れた環境で、C#/.NET 版の build と横断確認が通ることを確認しています。
+共通処理のテストとWindows GUIの確認:
+
+```powershell
+dotnet run --project .\csharp\HashChecker.Tests
+dotnet build .\csharp\HashChecker.Gui
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test_powershell.ps1
+```
 
 Rust 版の確認:
 
@@ -240,11 +265,9 @@ python .\scripts\run_cross_checks.py
 python .\scripts\run_cross_checks.py --language rust
 ```
 
-この横断確認では、Python / Go / C#/.NET / Rust 版が同じ `testdata` に対して共通仕様どおりの終了コードを返すかを確認します。
+この横断確認では、同じ `testdata` に対する終了コードとJSON内容、直接入力、エラー、対応機能、Rust → Go → Pythonの受け渡しを確認します。
 
-ローカル環境と GitHub Actions の両方で、Python / Go / C#/.NET / Rust 版の横断確認が通ることを確認しています。
-
-GitHub Actions では `push` と `pull_request` のたびに、各言語版の個別テスト・ビルドと横断確認を実行します。
+GitHub Actionsでは `push` と `pull_request` のたびにUbuntuとWindowsで個別テスト・ビルド・横断確認を実行します。WindowsではPowerShell 5.1とWPF画面のスモーク確認も行い、GUIのPNGを成果物に残します。
 
 ## ドキュメント
 

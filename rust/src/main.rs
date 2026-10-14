@@ -1,4 +1,6 @@
+mod manifest;
 use md5::Md5;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::env;
 use std::error::Error;
@@ -67,6 +69,10 @@ struct Options {
     workspace: PathBuf,
     hash_file: Option<PathBuf>,
     target_file: Option<PathBuf>,
+    expected_hash: Option<String>,
+    format: String,
+    create_manifest: Option<PathBuf>,
+    compare_manifest: Option<PathBuf>,
 }
 
 fn main() {
@@ -74,61 +80,156 @@ fn main() {
 }
 
 fn run(args: Vec<String>) -> i32 {
+    if args == ["--version"] {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return 0;
+    }
+    if args == ["--capabilities"] {
+        println!(
+            "{}",
+            json!({"schema_version":1,"capabilities":["single-verify","expected-hash","json-report","manifest-create","manifest-compare"]})
+        );
+        return 0;
+    }
+    let json_output = args
+        .windows(2)
+        .rev()
+        .find(|a| a[0] == "--format")
+        .map(|a| a[1] == "json")
+        .unwrap_or(false);
+    let algorithm = args
+        .windows(2)
+        .rev()
+        .find(|a| a[0] == "--algorithm" || a[0] == "-a")
+        .map(|a| a[1].to_ascii_lowercase())
+        .unwrap_or_default();
+    let operation = if args.iter().any(|a| a == "--create-manifest") {
+        "create"
+    } else if args.iter().any(|a| a == "--compare-manifest") {
+        "compare"
+    } else {
+        "verify"
+    };
     match execute(args) {
-        Ok(matched) => {
-            if matched {
-                0
-            } else {
-                EXIT_MISMATCH
+        Ok(report) => {
+            let code = report["exit_code"].as_i64().unwrap_or(5) as i32;
+            if json_output {
+                println!("{report}");
             }
+            code
+        }
+        Err(error) if json_output => {
+            let report = make_report(
+                &algorithm,
+                operation,
+                vec![],
+                error.exit_code,
+                Some(json!({"code":error.exit_code,"message":error.message})),
+            );
+            println!("{report}");
+            error.exit_code
         }
         Err(error) => print_error(error),
     }
 }
 
-fn execute(args: Vec<String>) -> Result<bool, HashCheckerError> {
+fn make_report(
+    algorithm: &str,
+    operation: &str,
+    results: Vec<Value>,
+    exit_code: i32,
+    error: Option<Value>,
+) -> Value {
+    let mut summary =
+        json!({"match":0,"mismatch":0,"missing":0,"error":0,"added":0,"removed":0,"changed":0});
+    for result in &results {
+        if let Some(status) = result["status"].as_str() {
+            summary[status] = json!(summary[status].as_u64().unwrap_or(0) + 1);
+        }
+    }
+    let algorithm = find_algorithm(algorithm).map(|config| config.key);
+    json!({"schema_version":1,"algorithm":algorithm,"operation":operation,"results":results,"summary":summary,"exit_code":exit_code,"error":error})
+}
+
+fn item(
+    path: &str,
+    status: &str,
+    expected: Option<&str>,
+    actual: Option<&str>,
+    error_code: Option<i32>,
+) -> Value {
+    json!({"path":path,"status":status,"expected_hash":expected,"actual_hash":actual,"error_code":error_code})
+}
+
+fn execute(args: Vec<String>) -> Result<Value, HashCheckerError> {
     let options = parse_args(&args)?;
-    let config = find_algorithm(&options.algorithm).ok_or_else(|| {
-        HashCheckerError::new(
-            "ハッシュ方式を指定してください。対応方式: md5, sha256",
-            EXIT_DISCOVERY_ERROR,
-        )
-    })?;
+    let config = find_algorithm(&options.algorithm).unwrap();
     let workspace = absolute_path(&options.workspace)?;
-
-    print_header(&workspace, config.label);
-
     if !workspace.is_dir() {
         return Err(HashCheckerError::new(
-            format!("作業フォルダが見つかりません: {}", workspace.display()),
+            "作業フォルダが見つかりません。",
             EXIT_DISCOVERY_ERROR,
         ));
     }
-
-    let hash_file = match options.hash_file {
-        Some(path) => resolve_path(&path, &workspace)?,
-        None => discover_hash_file(&workspace)?,
+    if let Some(path) = &options.create_manifest {
+        let report = manifest::create(&workspace, &absolute_path(path)?)?;
+        if options.format == "text" {
+            manifest::print_report(&report);
+        }
+        return Ok(report);
+    }
+    if let Some(path) = &options.compare_manifest {
+        let report = manifest::compare(&workspace, &absolute_path(path)?)?;
+        if options.format == "text" {
+            manifest::print_report(&report);
+        }
+        return Ok(report);
+    }
+    if options.format == "text" {
+        print_header(&workspace, config.label);
+    }
+    let hash_file = if options.expected_hash.is_some() {
+        None
+    } else {
+        Some(match options.hash_file {
+            Some(ref path) => resolve_path(path, &workspace)?,
+            None => discover_hash_file(&workspace)?,
+        })
     };
     let target_file = match options.target_file {
-        Some(path) => resolve_path(&path, &workspace)?,
+        Some(ref path) => resolve_path(path, &workspace)?,
         None => discover_target_file(&workspace)?,
     };
-
-    let vendor_hash = read_vendor_hash(&hash_file, config)?;
+    let vendor_hash = match options.expected_hash {
+        Some(ref hash) => validate_hash(hash.trim(), config)?,
+        None => read_vendor_hash(hash_file.as_ref().unwrap(), config)?,
+    };
     let actual_hash = calculate_file_hash(&target_file, config)?;
     let matched = vendor_hash == actual_hash;
-
-    print_result(
-        matched,
-        &workspace,
-        config.label,
-        &hash_file,
-        &target_file,
-        &vendor_hash,
-        &actual_hash,
-    );
-
-    Ok(matched)
+    if options.format == "text" {
+        print_result(
+            matched,
+            &workspace,
+            config.label,
+            hash_file.as_deref().unwrap_or(Path::new("<直接入力>")),
+            &target_file,
+            &vendor_hash,
+            &actual_hash,
+        );
+    }
+    Ok(make_report(
+        config.key,
+        "verify",
+        vec![item(
+            &file_name(&target_file),
+            if matched { "match" } else { "mismatch" },
+            Some(&vendor_hash),
+            Some(&actual_hash),
+            None,
+        )],
+        if matched { 0 } else { EXIT_MISMATCH },
+        None,
+    ))
 }
 
 fn parse_args(args: &[String]) -> Result<Options, HashCheckerError> {
@@ -136,6 +237,10 @@ fn parse_args(args: &[String]) -> Result<Options, HashCheckerError> {
     let mut workspace = PathBuf::from(".");
     let mut hash_file: Option<PathBuf> = None;
     let mut target_file: Option<PathBuf> = None;
+    let mut expected_hash = None;
+    let mut format = "text".to_string();
+    let mut create_manifest = None;
+    let mut compare_manifest = None;
     let mut index = 0;
 
     while index < args.len() {
@@ -164,9 +269,19 @@ fn parse_args(args: &[String]) -> Result<Options, HashCheckerError> {
                     &option_name,
                 )?));
             }
-            unknown => {
+            "--expected-hash" | "--format" | "--create-manifest" | "--compare-manifest" => {
+                let name = args[index].clone();
+                let value = read_option_value(args, &mut index, &name)?;
+                match name.as_str() {
+                    "--expected-hash" => expected_hash = Some(value),
+                    "--format" => format = value,
+                    "--create-manifest" => create_manifest = Some(PathBuf::from(value)),
+                    _ => compare_manifest = Some(PathBuf::from(value)),
+                }
+            }
+            _ => {
                 return Err(HashCheckerError::new(
-                    format!("不明な引数です: {unknown}"),
+                    "不明な引数です。",
                     EXIT_DISCOVERY_ERROR,
                 ));
             }
@@ -188,11 +303,39 @@ fn parse_args(args: &[String]) -> Result<Options, HashCheckerError> {
         ));
     }
 
+    if format != "text" && format != "json" {
+        return Err(HashCheckerError::new(
+            "出力形式は text または json です。",
+            EXIT_DISCOVERY_ERROR,
+        ));
+    }
+    if hash_file.is_some() && expected_hash.is_some() {
+        return Err(HashCheckerError::new(
+            "--hash-file と --expected-hash は併用できません。",
+            EXIT_DISCOVERY_ERROR,
+        ));
+    }
+    if (create_manifest.is_some() || compare_manifest.is_some())
+        && (algorithm != "sha256"
+            || (create_manifest.is_some() && compare_manifest.is_some())
+            || hash_file.is_some()
+            || target_file.is_some()
+            || expected_hash.is_some())
+    {
+        return Err(HashCheckerError::new(
+            "一覧操作は SHA256 専用です。単体検証の入力や別の一覧操作とは併用できません。",
+            EXIT_DISCOVERY_ERROR,
+        ));
+    }
     Ok(Options {
         algorithm,
         workspace,
         hash_file,
         target_file,
+        expected_hash,
+        format,
+        create_manifest,
+        compare_manifest,
     })
 }
 
@@ -226,14 +369,8 @@ fn absolute_path(path: &Path) -> Result<PathBuf, HashCheckerError> {
 
     env::current_dir()
         .map(|current_dir| current_dir.join(path))
-        .map_err(|error| {
-            HashCheckerError::new(
-                format!(
-                    "作業フォルダのパスを解決できません: {}\n{error}",
-                    path.display()
-                ),
-                EXIT_DISCOVERY_ERROR,
-            )
+        .map_err(|_| {
+            HashCheckerError::new("作業フォルダのパスを解決できません。", EXIT_DISCOVERY_ERROR)
         })
 }
 
@@ -247,9 +384,9 @@ fn resolve_path(path: &Path, workspace: &Path) -> Result<PathBuf, HashCheckerErr
 
 fn discover_hash_file(workspace: &Path) -> Result<PathBuf, HashCheckerError> {
     let mut hash_files = fs::read_dir(workspace)
-        .map_err(|error| {
+        .map_err(|_error| {
             HashCheckerError::new(
-                format!("ハッシュファイルを検索できませんでした。\n{error}"),
+                "ハッシュファイルを検索できませんでした。",
                 EXIT_DISCOVERY_ERROR,
             )
         })?
@@ -277,9 +414,9 @@ fn discover_hash_file(workspace: &Path) -> Result<PathBuf, HashCheckerError> {
 
 fn discover_target_file(workspace: &Path) -> Result<PathBuf, HashCheckerError> {
     let mut target_files = fs::read_dir(workspace)
-        .map_err(|error| {
+        .map_err(|_error| {
             HashCheckerError::new(
-                format!("確認対象ファイルを検索できませんでした。\n{error}"),
+                "確認対象ファイルを検索できませんでした。",
                 EXIT_DISCOVERY_ERROR,
             )
         })?
@@ -339,9 +476,9 @@ fn list_files(paths: &[PathBuf]) -> String {
 }
 
 fn read_vendor_hash(hash_file: &Path, config: AlgorithmConfig) -> Result<String, HashCheckerError> {
-    let raw_text = fs::read_to_string(hash_file).map_err(|error| {
+    let raw_text = fs::read_to_string(hash_file).map_err(|_error| {
         HashCheckerError::new(
-            format!("ハッシュファイルを読み取れませんでした。ファイルの権限や状態を確認してください。\n{error}"),
+            "ハッシュファイルを読み取れませんでした。ファイルの権限や状態を確認してください。",
             EXIT_READ_ERROR,
         )
     })?;
@@ -366,7 +503,10 @@ fn read_vendor_hash(hash_file: &Path, config: AlgorithmConfig) -> Result<String,
         ));
     }
 
-    let vendor_hash = lines[0];
+    validate_hash(lines[0], config)
+}
+
+fn validate_hash(vendor_hash: &str, config: AlgorithmConfig) -> Result<String, HashCheckerError> {
     if vendor_hash.len() != config.expected_length {
         return Err(HashCheckerError::new(
             format!(
@@ -431,9 +571,9 @@ fn update_hash<D: Digest>(
     }
 }
 
-fn hash_calculation_error(error: io::Error) -> HashCheckerError {
+fn hash_calculation_error(_error: io::Error) -> HashCheckerError {
     HashCheckerError::new(
-        format!("確認対象ファイルのハッシュ値を算出できませんでした。ファイルの権限や状態を確認してください。\n{error}"),
+        "確認対象ファイルのハッシュ値を算出できませんでした。ファイルの権限や状態を確認してください。",
         EXIT_HASH_CALCULATION_ERROR,
     )
 }
@@ -580,5 +720,112 @@ mod tests {
             "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
         );
         fs::remove_dir_all(workspace).expect("temp workspace should be removed");
+    }
+
+    fn arguments(parts: &[&str]) -> Vec<String> {
+        parts.iter().map(|part| part.to_string()).collect()
+    }
+
+    #[test]
+    fn direct_hash_json_matches_and_keeps_paths_relative() {
+        let workspace = temp_workspace("direct_json");
+        fs::write(workspace.join("data.bin"), b"hello").unwrap();
+        // Extra txt files must not trigger hash-file discovery with direct input.
+        fs::write(workspace.join("one.txt"), b"unused").unwrap();
+        fs::write(workspace.join("two.txt"), b"unused").unwrap();
+        let mut args = arguments(&[
+            "--algorithm",
+            "sha256",
+            "--expected-hash",
+            " 2CF24DBA5FB0A30E26E83B2AC5B9E29E1B161E5C1FA7425E73043362938B9824 ",
+            "--format",
+            "json",
+            "--workspace",
+        ]);
+        args.push(workspace.to_string_lossy().into());
+        let report = execute(args).unwrap();
+        assert_eq!(report["exit_code"], 0);
+        assert_eq!(report["summary"]["match"], 1);
+        assert_eq!(report["results"][0]["path"], "data.bin");
+        assert_eq!(
+            report["results"][0]["expected_hash"],
+            report["results"][0]["actual_hash"]
+        );
+        assert!(!report
+            .to_string()
+            .contains(&workspace.to_string_lossy().to_string()));
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn direct_md5_json_reports_mismatch() {
+        let workspace = temp_workspace("direct_mismatch");
+        fs::write(workspace.join("data.bin"), b"hello").unwrap();
+        let mut args = arguments(&[
+            "--algorithm",
+            "md5",
+            "--expected-hash",
+            "00000000000000000000000000000000",
+            "--format",
+            "json",
+            "--workspace",
+        ]);
+        args.push(workspace.to_string_lossy().into());
+        let report = execute(args).unwrap();
+        assert_eq!(report["exit_code"], 1);
+        assert_eq!(report["summary"]["mismatch"], 1);
+        assert_eq!(
+            report["results"][0]["actual_hash"],
+            "5d41402abc4b2a76b9719d911017c592"
+        );
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn parse_rejects_conflicting_inputs_and_unsupported_mode() {
+        for parts in [
+            vec![
+                "--algorithm",
+                "md5",
+                "--hash-file",
+                "h.txt",
+                "--expected-hash",
+                "abc",
+            ],
+            vec!["--algorithm", "md5", "--create-manifest", "s.txt"],
+            vec![
+                "--algorithm",
+                "sha256",
+                "--create-manifest",
+                "s.txt",
+                "--target-file",
+                "data.bin",
+            ],
+            vec![
+                "--algorithm",
+                "sha256",
+                "--create-manifest",
+                "s.txt",
+                "--compare-manifest",
+                "s.txt",
+            ],
+            vec![
+                "--algorithm",
+                "sha256",
+                "--compare-manifest",
+                "s.txt",
+                "--expected-hash",
+                "abc",
+            ],
+            vec!["--algorithm", "sha256", "--format", "xml"],
+        ] {
+            assert_eq!(parse_args(&arguments(&parts)).unwrap_err().exit_code, 2);
+        }
+        assert_eq!(
+            validate_hash("invalid", find_algorithm("sha256").unwrap())
+                .unwrap_err()
+                .exit_code,
+            4
+        );
     }
 }

@@ -6,41 +6,65 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
-
+          python-version: '3.x'
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
-
+          dotnet-version: '10.0.x'
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-
+        with:
+          components: rustfmt, clippy
       - name: Test Python implementation
         run: python -m unittest discover -s python
-
       - name: Test Go implementation
         run: go test ./go
-
       - name: Build C# implementation
         run: dotnet build ./csharp/HashChecker
-
+      - name: Test C# shared verification
+        run: dotnet run --project ./csharp/HashChecker.Tests
       - name: Test Rust implementation
         run: cargo test --manifest-path ./rust/Cargo.toml
-
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path ./rust/Cargo.toml -- --check
+      - name: Check Rust warnings
+        run: cargo clippy --manifest-path ./rust/Cargo.toml --all-targets -- -D warnings
       - name: Run cross-language checks
         run: python ./scripts/run_cross_checks.py
+      - name: Test Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/test_powershell.ps1
+      - name: Build Windows GUI
+        if: runner.os == 'Windows'
+        run: dotnet build ./csharp/HashChecker.Gui
+      - name: Exercise and render Windows GUI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path ./bin | Out-Null
+          $smokePath = Join-Path (Get-Location) 'bin/gui-smoke.png'
+          $process = Start-Process -FilePath './csharp/HashChecker.Gui/bin/Debug/net10.0-windows/HashChecker.Gui.exe' -ArgumentList @('--smoke', ('"' + $smokePath + '"')) -WindowStyle Hidden -PassThru
+          if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'GUI smoke timed out' }
+          if ($process.ExitCode -ne 0) { throw 'GUI smoke failed' }
+      - name: Upload GUI preview
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-gui-preview
+          path: bin/gui-smoke.png
+          if-no-files-found: error
