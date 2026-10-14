@@ -1,278 +1,85 @@
-# ハッシュ値確認ツール
+# HashChecker
 
 [![Check](https://github.com/Termnix-IT/HashChecker/actions/workflows/check.yml/badge.svg)](https://github.com/Termnix-IT/HashChecker/actions/workflows/check.yml)
 
-ベンダーから提供されたハッシュ値と、確認対象ファイルから算出したハッシュ値を比較するためのツールです。
+配布元のハッシュ値とファイルから計算した値を比較するツールです。MD5とSHA256に対応しています。
 
-このリポジトリでは、共通の検証仕様を複数言語で実装し、それぞれを用途別のツールとして発展させています。
+共通の検証仕様をPython / Go / C# / Rustで実装し、各言語を用途別に発展させています。PowerShellは、Windows標準機能で使う業務版として維持しています。
 
-## このリポジトリで示すこと
+## 用途で選ぶ
 
-- 実務制約に合わせた PowerShell 版と、共通仕様に沿った CLI 版の設計差
-- Python / Go / C#/.NET / Rust で同じ仕様を実装したときの言語ごとの特徴
-- 入力検出、ハッシュ値検証、終了コード、エラー表示を言語間で揃える設計
-- GitHub Actions と横断確認スクリプトによる仕様差の検出
-- Rustで作成した一覧をGoで検証し、Pythonで結果を集計する言語間の受け渡し
+| やりたいこと | 実装 | 主な機能 | 開発・ビルド情報 |
+|---|---|---|---|
+| Windows標準機能で確認・記録する | PowerShell | `.bat`起動、結果オブジェクト、CSV保存 | [PowerShell版手順書](docs/PowerShell版手順書.md) |
+| 検証結果を加工・集計する | Python | 単体検証、複数JSON結果のCSV集計 | [Python版](python/README.md) |
+| スクリプトやCIで一括検証する | Go | SHA256一覧の検証、成功時の出力抑制 | [Go版](go/README.md) |
+| ファイル選択や貼り付けで確認する | C#/.NET | Windows GUI、進捗、キャンセル、結果コピー | [C#/.NET版](csharp/README.md) |
+| フォルダの状態を記録・比較する | Rust | SHA256一覧作成、追加・削除・変更検出 | [Rust版](rust/README.md) |
 
-## 実装比較
+Python / Go / C# / RustのCLIは、単体検証、期待値の直接入力、共通JSON結果、バージョン・対応機能表示を共有します。用途別機能の実装は全言語に義務づけず、対応する実装間で入出力形式を揃えます。
 
-| 実装 | 位置づけ | 主な確認ポイント |
-|---|---|---|
-| PowerShell | 業務制約版 | Windows 標準機能、`.bat` 起動、結果オブジェクト・CSV保存 |
-| Python | 基準実装・結果集計 | 共通JSONの検証、複数結果をCSVへ集計 |
-| Go | 配布用CLI・CI検証 | SHA256一覧の一括検証、成功時の出力抑制 |
-| C#/.NET | Windows向けGUI | ファイル選択・ドラッグ、貼り付け、進捗・キャンセル |
-| Rust | フォルダ状態の記録 | SHA256一覧作成、追加・削除・変更検出 |
+例えば、Rustで一覧を作成し、Goで検証して、Pythonで結果を集計できます。Goは一覧に記載されたファイルを確認し、Rustはフォルダに追加されたファイルも検出します。
 
-## フォルダ構成
+## まず試す
 
-```text
-HashChecker/
-├─ README.md
-├─ go.mod
-├─ 共通仕様.md
-├─ docs/
-│  ├─ HashChecker手順書.md
-│  ├─ PowerShell版手順書.md
-│  ├─ 多言語CLI版手順書.md
-│  └─ 比較メモ.md
-├─ scripts/
-│  ├─ run_cross_checks.py
-│  └─ test_powershell.ps1
-├─ csharp/
-│  ├─ README.md
-│  ├─ HashChecker.Core/
-│  ├─ HashChecker.Gui/
-│  ├─ HashChecker.Tests/
-│  └─ HashChecker/
-│     ├─ HashChecker.csproj
-│     └─ Program.cs
-├─ rust/
-│  ├─ Cargo.lock
-│  ├─ Cargo.toml
-│  ├─ README.md
-│  ├─ src/
-│  │  ├─ main.rs
-│  │  └─ manifest.rs
-│  └─ tests/
-│     └─ cli.rs
-├─ powershell/
-│  ├─ Run-MD5Check.bat
-│  ├─ Run-SHA256Check.bat
-│  ├─ HashChecker.Common.ps1
-│  ├─ Verify-MD5Hash.ps1
-│  └─ Verify-SHA256Hash.ps1
-├─ go/
-│  ├─ README.md
-│  ├─ hash_checker.go
-│  ├─ hash_checker_test.go
-│  └─ manifest_test.go
-├─ python/
-│  ├─ README.md
-│  ├─ hash_checker.py
-│  ├─ summarize_results.py
-│  ├─ test_hash_checker.py
-│  └─ test_reports.py
-└─ testdata/
-   ├─ ok-md5/
-   ├─ ok-sha256/
-   ├─ mismatch/
-   ├─ invalid-hash/
-   └─ multiple-targets/
-```
-
-## 共通仕様
-
-各言語版は [共通仕様](./共通仕様.md) に従って実装します。
-
-主な仕様は以下です。
-
-- 対応アルゴリズムは MD5 と SHA256
-- ハッシュ値はテキストファイルから読み込む
-- 空行は無視する
-- 空行を除いて複数行ある場合はエラー
-- 大文字・小文字は区別しない
-- ハッシュ値の文字数と16進数形式を検証する
-- 終了コードを言語間で揃える
-- CLIの直接入力、JSON結果、バージョン・対応機能表示
-
-独自機能は全言語へ追加せず、対応する実装同士で入出力形式を揃えます。共通機能と受け渡し形式の境界は [共通仕様](./共通仕様.md)、用途別の実行方法は [多言語CLI版手順書](./docs/多言語CLI版手順書.md) を参照してください。
-
-## 実装順
-
-1. Python
-2. Go
-3. C#/.NET
-4. Rust
-
-共通CLIはPython版を基準に揃え、用途別機能は上の担当に沿って実装します。
-
-## PowerShell 版
-
-業務制約版として、Windows PowerShell の `Get-FileHash` を使用します。
-
-MD5確認:
-
-```powershell
-.\powershell\Run-MD5Check.bat
-```
-
-SHA256確認:
-
-```powershell
-.\powershell\Run-SHA256Check.bat
-```
-
-PowerShell 版は `.bat`、`.ps1`、ハッシュファイル、確認対象ファイルを同じフォルダに置いて使う想定です。既存どおり使う場合は、`powershell/` フォルダ内に `vendor_hash.txt` と確認対象ファイルを配置してください。
-
-## Python 版
-
-Python 標準ライブラリだけで実装した CLI 版です。
-
-SHA256 の正常系サンプル:
+以下のコマンドはリポジトリのルートからPowerShellで実行します。Pythonを利用できる環境なら、同梱サンプルで単体検証を試せます。
 
 ```powershell
 python .\python\hash_checker.py --algorithm sha256 --workspace .\testdata\ok-sha256
 ```
 
-MD5 の正常系サンプル:
+`[正常]`の表示と終了コード0が一致を示します。GUIや一括検証を試す場合は、[操作手順の入口](docs/HashChecker手順書.md)から用途を選んでください。
+
+使用する実装に合わせて実行・ビルド環境を用意してください。現行コードを試す手順はソースからの実行・ビルドを前提とし、インストーラーやリリース成果物の作成を伴いません。
+
+## ドキュメントの役割
+
+| 文書 | 内容 |
+|---|---|
+| [操作手順の入口](docs/HashChecker手順書.md) | 用途に合う操作手順へ案内 |
+| [多言語CLI・GUI版手順書](docs/多言語CLI版手順書.md) | 単体検証、JSON保存、Rust→Go→Pythonの連携、GUI操作 |
+| [PowerShell版手順書](docs/PowerShell版手順書.md) | `.bat`での確認、パラメーター、結果オブジェクト、CSV保存 |
+| [共通仕様](共通仕様.md) | 引数・パス・終了コード・JSON・チェックサム一覧の契約 |
+| [比較メモ](docs/比較メモ.md) | 用途分担、設計理由、依存関係、保守上の判断 |
+| 言語別README | その実装の開発環境、ビルド、配布形式、個別テスト |
+| [検証用データ](testdata/README.md) | 固定サンプルの目的、期待結果、バイト列の保持 |
+
+## リポジトリの構成
+
+| 場所 | 役割 |
+|---|---|
+| `powershell/` | 固定アルゴリズムの起動スクリプトと共通処理 |
+| `python/` | 基準CLI、JSON結果の集計、単体テスト |
+| `go/` | 配布用CLI、単体・一覧検証のテスト |
+| `csharp/HashChecker/` | 共通CLI |
+| `csharp/HashChecker.Core/` | CLIとGUIが共有する検証処理 |
+| `csharp/HashChecker.Gui/` | Windows向けWPF画面 |
+| `csharp/HashChecker.Tests/` | 共有処理のテスト |
+| `rust/src/`・`rust/tests/` | CLI、フォルダ記録・比較、単体・CLIテスト |
+| `scripts/` | 言語横断確認とPowerShell確認 |
+| `docs/`・`testdata/` | 手順・設計説明と検証用データ |
+
+## 開発時の検証
+
+個別のビルド・テストは言語別READMEを参照してください。4言語の開発環境を用意すると、共通CLIと受け渡しをまとめて確認できます。
 
 ```powershell
-python .\python\hash_checker.py --algorithm md5 --workspace .\testdata\ok-md5
-```
-
-ハッシュファイルと確認対象ファイルを明示する場合:
-
-```powershell
-python .\python\hash_checker.py --algorithm md5 --hash-file .\testdata\ok-md5\vendor_hash.txt --target-file .\testdata\ok-md5\firmware.bin
-```
-
-## Go 版
-
-Go 標準ライブラリだけで実装した CLI 版です。単一バイナリ配布を想定した比較対象です。
-
-SHA256 の正常系サンプル:
-
-```powershell
-go run .\go --algorithm sha256 --workspace .\testdata\ok-sha256
-```
-
-MD5 の正常系サンプル:
-
-```powershell
-go run .\go --algorithm md5 --workspace .\testdata\ok-md5
-```
-
-ビルド例:
-
-```powershell
-go build -o .\bin\hash-checker.exe .\go
-```
-
-## C#/.NET 版
-
-.NET 10 の共通処理をCLIとWindows向けWPF GUIで共有します。GUIは以下で起動できます。
-
-```powershell
-dotnet run --project .\csharp\HashChecker.Gui
-```
-
-SHA256 の正常系サンプル:
-
-```powershell
-dotnet run --project .\csharp\HashChecker -- --algorithm sha256 --workspace .\testdata\ok-sha256
-```
-
-MD5 の正常系サンプル:
-
-```powershell
-dotnet run --project .\csharp\HashChecker -- --algorithm md5 --workspace .\testdata\ok-md5
-```
-
-ビルド例:
-
-```powershell
-dotnet build .\csharp\HashChecker
-```
-
-## Rust 版
-
-Rust で実装した CLI 版です。単一バイナリ配布、型安全性、依存関係の選定を比較するための実装です。
-
-SHA256 の正常系サンプル:
-
-```powershell
-cargo run --manifest-path .\rust\Cargo.toml -- --algorithm sha256 --workspace .\testdata\ok-sha256
-```
-
-MD5 の正常系サンプル:
-
-```powershell
-cargo run --manifest-path .\rust\Cargo.toml -- --algorithm md5 --workspace .\testdata\ok-md5
-```
-
-ビルド例:
-
-```powershell
-cargo build --manifest-path .\rust\Cargo.toml --release
-```
-
-## テスト
-
-Python 版のテスト:
-
-```powershell
-python -m unittest discover -s python
-```
-
-Go 版のテスト:
-
-```powershell
-go test .\go
-```
-
-C#/.NET 版の確認:
-
-```powershell
-dotnet build .\csharp\HashChecker
-dotnet run --project .\csharp\HashChecker -- --algorithm sha256 --workspace .\testdata\ok-sha256
-```
-
-共通処理のテストとWindows GUIの確認:
-
-```powershell
-dotnet run --project .\csharp\HashChecker.Tests
-dotnet build .\csharp\HashChecker.Gui
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test_powershell.ps1
-```
-
-Rust 版の確認:
-
-```powershell
-cargo test --manifest-path .\rust\Cargo.toml
-cargo run --manifest-path .\rust\Cargo.toml -- --algorithm sha256 --workspace .\testdata\ok-sha256
-```
-
-言語横断の確認:
-
-```powershell
+$env:PYTHONUTF8 = '1'
 python .\scripts\run_cross_checks.py
 ```
 
-特定の言語だけ確認する場合:
+この確認は各CLIをビルドし、[固定サンプル](testdata/README.md)の終了コードとJSON内容、直接入力、エラー、バージョン・対応機能を検査します。GoとRustを選択した場合は、Rustの一覧作成→Goの検証→Pythonの集計も確認します。
+
+特定の実装だけを確認する場合は、`--language`を指定します。複数指定もできます。
 
 ```powershell
-python .\scripts\run_cross_checks.py --language rust
+python .\scripts\run_cross_checks.py --language go --language rust
 ```
 
-この横断確認では、同じ `testdata` に対する終了コードとJSON内容、直接入力、エラー、対応機能、Rust → Go → Pythonの受け渡しを確認します。
+`--allow-missing`は不足する開発環境をスキップするローカル用の指定です。未実施の言語があっても終了コード0になり得るため、`MISSING`の表示で確認範囲を把握してください。CIではこの指定を使用しません。
 
-GitHub Actionsでは `push` と `pull_request` のたびにUbuntuとWindowsで個別テスト・ビルド・横断確認を実行します。WindowsではPowerShell 5.1とWPF画面のスモーク確認も行い、GUIのPNGを成果物に残します。
+[GitHub Actions](.github/workflows/check.yml)はUbuntuとWindowsで個別テスト・ビルド・横断確認を実行します。WindowsではPowerShell 5.1とWPF画面の確認も行い、`windows-gui-preview`という名前で画面のPNGを保存します。
 
-## ドキュメント
+## 過去のプレリリース資料
 
-- [共通仕様](./共通仕様.md)
-- [操作手順書](./docs/HashChecker手順書.md)
-- [PowerShell 版 手順書](./docs/PowerShell版手順書.md)
-- [多言語 CLI 版 手順書](./docs/多言語CLI版手順書.md)
-- [多言語版 比較メモ](./docs/比較メモ.md)
+[v0.1.0-pre.1のリリースノート](docs/リリースノート-v0.1.0-pre.1.md)と[公開手順の記録](docs/プレリリース作業メモ-v0.1.0-pre.1.md)は、初期のCLI比較版に関する資料です。現在の操作・機能は上記の手順書と共通仕様を参照してください。
