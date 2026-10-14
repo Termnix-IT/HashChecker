@@ -1,6 +1,8 @@
 # Python 版 HashChecker
 
-Python 標準ライブラリだけで実装したハッシュ確認ツールです。
+Python 標準ライブラリだけで実装した基準CLIと結果集計ツールです。
+
+`summarize_results.py` で共通JSON結果をCSVへ集計できます。直接入力、JSON保存、集計の利用方法は [多言語CLI版手順書](../docs/多言語CLI版手順書.md) を参照してください。
 
 ## 実行例
 

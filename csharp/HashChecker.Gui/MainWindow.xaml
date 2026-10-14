@@ -1,0 +1,62 @@
+<Window x:Class="HashChecker.Gui.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="HashChecker" Width="860" Height="760" MinWidth="720" MinHeight="660"
+        FontFamily="Yu Gothic UI" FontSize="14" Background="#F5F6F8"
+        AllowDrop="True" PreviewDragOver="Window_DragOver" PreviewDrop="Window_Drop">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="16,9" />
+            <Setter Property="MinHeight" Value="38" />
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </Window.Resources>
+    <Grid Margin="28">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,22">
+            <TextBlock Text="ファイルのハッシュを確認" FontSize="25" FontWeight="SemiBold" />
+            <TextBlock Text="配布元のハッシュ値と比較して、ファイルが一致するか確認します。" Foreground="#596273" Margin="0,6,0,0" />
+        </StackPanel>
+        <StackPanel Grid.Row="1" Margin="0,0,0,18">
+            <Label Target="{Binding ElementName=FilePath}" Content="1. 確認するファイル" Padding="0,0,0,7" FontWeight="SemiBold" />
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBox x:Name="FilePath" TextChanged="Input_Changed" AutomationProperties.Name="確認するファイル" />
+                <Button x:Name="SelectButton" Grid.Column="1" Content="ファイルを選択…" Margin="10,0,0,0" Click="Select_Click" />
+            </Grid>
+            <TextBlock Text="ここにファイルをドラッグしても選択できます。" FontSize="12" Foreground="#596273" Margin="0,6,0,0" />
+        </StackPanel>
+        <StackPanel Grid.Row="2" Margin="0,0,0,18">
+            <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <Label Target="{Binding ElementName=ExpectedHash}" Content="2. 配布元のハッシュ値" Padding="0" VerticalAlignment="Center" FontWeight="SemiBold" />
+                <ComboBox x:Name="Algorithm" Grid.Column="1" Width="130" SelectedIndex="0" SelectionChanged="Input_Changed" AutomationProperties.Name="ハッシュ方式">
+                    <ComboBoxItem Content="SHA256" /><ComboBoxItem Content="MD5" />
+                </ComboBox>
+            </Grid>
+            <TextBox x:Name="ExpectedHash" TextChanged="Input_Changed" FontFamily="Consolas" AutomationProperties.Name="配布元のハッシュ値" />
+            <TextBlock x:Name="HashHint" Text="64文字のSHA256を貼り付けてください。" FontSize="12" Foreground="#596273" Margin="0,6,0,0" />
+        </StackPanel>
+        <StackPanel Grid.Row="3" Margin="0,0,0,18">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="VerifyButton" Content="ハッシュを確認" Click="Verify_Click" Background="#244F88" Foreground="White" FontWeight="SemiBold" IsEnabled="False" />
+                <Button x:Name="CancelButton" Content="キャンセル" Click="Cancel_Click" Margin="10,0,0,0" IsEnabled="False" />
+            </StackPanel>
+            <ProgressBar x:Name="Progress" Height="7" Minimum="0" Maximum="100" Margin="0,14,0,0" />
+        </StackPanel>
+        <Border Grid.Row="4" Background="White" BorderBrush="#D8DDE5" BorderThickness="1" Padding="18">
+            <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <TextBlock x:Name="StatusText" Text="ファイルとハッシュ値を入力してください。" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBox x:Name="ResultText" Grid.Row="1" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" BorderThickness="0" Background="White" FontFamily="Consolas" FontSize="13" Margin="0,10,0,8" AutomationProperties.Name="確認結果" />
+                <Button x:Name="CopyButton" Grid.Row="2" Content="結果をコピー" HorizontalAlignment="Right" Click="Copy_Click" IsEnabled="False" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
