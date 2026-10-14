@@ -5,6 +5,9 @@ import csv
 import hashlib
 import io
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -15,6 +18,24 @@ import summarize_results
 
 
 class ReportTests(unittest.TestCase):
+    def test_cli_protocol_is_utf8_with_english_windows_pipe_encoding(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "日本語.bin"
+            target.write_bytes(b"sample")
+            env = {**os.environ, "PYTHONIOENCODING": "cp1252", "PYTHONUTF8": "0"}
+            cli = subprocess.run([sys.executable, str(Path(hash_checker.__file__)), "--algorithm", "sha256",
+                "--workspace", folder, "--expected-hash", hashlib.sha256(b"sample").hexdigest(), "--format", "json"],
+                capture_output=True, env=env, check=False)
+            self.assertEqual(cli.returncode, 0, cli.stderr)
+            report = json.loads(cli.stdout.decode("utf-8"))
+            self.assertEqual(report["results"][0]["path"], target.name)
+            source = Path(folder) / "report.json"
+            source.write_bytes(cli.stdout)
+            csv_cli = subprocess.run([sys.executable, str(Path(summarize_results.__file__)), str(source)],
+                                     capture_output=True, env=env, check=False)
+            self.assertEqual(csv_cli.returncode, 0, csv_cli.stderr)
+            self.assertIn(target.name, csv_cli.stdout.decode("utf-8"))
+
     def test_direct_hash_and_json_match_without_hash_file(self):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "日本語 file.bin"

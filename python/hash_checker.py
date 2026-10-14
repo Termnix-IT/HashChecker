@@ -329,7 +329,15 @@ def verify(argv: list[str]) -> int:
     return 0 if matched else EXIT_MISMATCH
 
 
+def configure_cli_streams() -> None:
+    # Machine-readable JSON and redirected Japanese output use UTF-8 on every OS.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
+
 def main() -> int:
+    configure_cli_streams()
     try:
         return run(sys.argv[1:])
     except HashCheckerError as exc:

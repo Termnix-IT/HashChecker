@@ -11,7 +11,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from hash_checker import ALGORITHMS, STATUSES, HashCheckerError
+from hash_checker import ALGORITHMS, STATUSES, HashCheckerError, configure_cli_streams
 
 
 MAX_REPORT_BYTES = 16 * 1024 * 1024
@@ -158,6 +158,7 @@ def run(argv: list[str]) -> int:
 
 
 def main() -> int:
+    configure_cli_streams()
     try:
         return run(sys.argv[1:])
     except HashCheckerError as exc:

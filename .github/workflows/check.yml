@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+env:
+  PYTHONUTF8: '1'
+
 jobs:
   test:
     strategy:
@@ -22,6 +25,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
